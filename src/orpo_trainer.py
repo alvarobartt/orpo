@@ -75,7 +75,7 @@ class ORPOTrainer(Trainer):
         # Calculate the Final Loss
         loss = torch.mean(pos_loss - self.alpha * ratio).to(dtype=torch.bfloat16)
         
-        wandb.log({'Positive Geometric Mean': torch.mean(pos_prob).item(),
+        self.log({'Positive Geometric Mean': torch.mean(pos_prob).item(),
                    'Negative Geometric Mean': torch.mean(neg_prob).item(),
                    'Log Odds Ratio': torch.mean(ratio).item(),
                    'Log Odds': torch.mean(log_odds).item()})

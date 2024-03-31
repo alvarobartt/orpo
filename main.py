@@ -4,6 +4,8 @@ import time
 import wandb
 import torch
 import argparse
+from datetime import timedelta
+from accelerate import Accelerator, InitProcessGroupKwargs
 from datasets import load_dataset
 from typing import List, Dict, Union
 from transformers import (
@@ -127,11 +129,10 @@ class ORPO(object):
             return False
 
     def prepare_trainer(self):
-        wandb.init(name=self.run_name)
         arguments = TrainingArguments(
             output_dir=self.save_dir,  # The output directory
             logging_dir=self.log_dir,
-            logging_steps=50,
+            logging_steps=10,
             learning_rate=self.args.lr,
             overwrite_output_dir=True,  # overwrite the content of the output directory
             num_train_epochs=self.args.num_train_epochs,  # number of training epochs
@@ -149,9 +150,10 @@ class ORPO(object):
             do_eval=self.is_test,
             lr_scheduler_type=self.args.lr_scheduler_type,
             remove_unused_columns=False,
-            report_to='wandb',
+            report_to=['wandb', 'tensorboard'],
             run_name=self.run_name,
-            bf16=True
+            bf16=True,
+            seed=self.args.seed,
         )
         
         data_collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)
@@ -198,6 +200,15 @@ if __name__ == '__main__':
     print(f"    - Training Epochs     : {args.num_train_epochs}")
     print(f"    - Prompt Max Length   : {args.prompt_max_length}")
     print(f"    - Response Max Length : {args.response_max_length}")
+
+    accelerator = Accelerator(
+        kwargs_handlers=[
+            InitProcessGroupKwargs(timeout=timedelta(seconds=12 * 1800))
+        ]
+    )
+
+    if accelerator.is_main_process:
+        wandb.init(name="official-impl")
 
     item = ORPO(args=args)
     item.run()
