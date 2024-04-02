@@ -28,8 +28,9 @@ class ORPO(object):
         print(">>> 1. Loading Tokenizer")
         self.tokenizer = AutoTokenizer.from_pretrained(self.args.model_name, cache_dir=self.args.cache_dir)
         if self.tokenizer.chat_template is None:
-            self.tokenizer.chat_template = "{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'system' %}\n{{ '<|system|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
-            print("     1-1. Chat Template Applied (<|user|> <|assistant|>)")
+            # self.tokenizer.chat_template = "{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'system' %}\n{{ '<|system|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
+            self.tokenizer.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+            print("     1-1. Chat Template Applied (<|im_start|> <|im_end|>)")
         else:
             pass
         self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
@@ -69,14 +70,6 @@ class ORPO(object):
         train = self.data[train_split].filter(self.filter_dataset)
         print(f"\n\n>>> {len(train)} / {len(self.data[train_split])} rows left after filtering by prompt length.")
         self.train = train.map(self.preprocess_dataset, batched=True, num_proc=self.args.num_proc, remove_columns=self.data[train_split].column_names)                       
-                
-        # Set WANDB & Logging Configurations
-        self.run_name = f"{self.args.model_name.split('/')[-1]}-{self.args.data_name.split('/')[-1]}-lambda{self.args.alpha}-ORPO-{self.start.tm_mday}-{self.start.tm_hour}-{self.start.tm_min}"
-        self.save_dir = os.path.join('./checkpoints/', f"{self.args.data_name.split('/')[-1]}/{self.run_name}")
-        self.log_dir = os.path.join('./checkpoints/', f"{self.args.data_name.split('/')[-1]}/{self.run_name}/logs")
-        
-        os.makedirs(self.save_dir, exist_ok=True)
-        os.makedirs(self.log_dir, exist_ok=True)
 
     def preprocess_dataset(self, examples: Union[List, Dict]):
         if ('instruction' in examples.keys()) or ('question' in examples.keys()):
@@ -130,8 +123,7 @@ class ORPO(object):
 
     def prepare_trainer(self):
         arguments = TrainingArguments(
-            output_dir=self.save_dir,  # The output directory
-            logging_dir=self.log_dir,
+            output_dir="./output",  # The output directory
             logging_steps=10,
             learning_rate=self.args.lr,
             overwrite_output_dir=True,  # overwrite the content of the output directory
@@ -151,7 +143,7 @@ class ORPO(object):
             lr_scheduler_type=self.args.lr_scheduler_type,
             remove_unused_columns=False,
             report_to=['wandb', 'tensorboard'],
-            run_name=self.run_name,
+            run_name="official-impl",
             bf16=True,
             seed=self.args.seed,
         )
